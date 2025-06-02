@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from "jose"
 import { cookies } from "next/headers"
+import bcrypt from "bcryptjs"
 
 const secret = new TextEncoder().encode(process.env.JWT_SECRET || "your-secret-key")
 
@@ -32,6 +33,40 @@ export async function getCurrentUser(): Promise<{ userId: number; email: string 
   if (!payload) return null
 
   return { userId: payload.userId, email: payload.email }
+}
+
+export async function hashPassword(password: string): Promise<string> {
+  const saltRounds = 12
+  return await bcrypt.hash(password, saltRounds)
+}
+
+export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+  return await bcrypt.compare(password, hash)
+}
+
+export function validatePassword(password: string): { isValid: boolean; errors: string[] } {
+  const errors: string[] = []
+
+  if (password.length < 8) {
+    errors.push("Password must be at least 8 characters long")
+  }
+
+  if (!/[a-zA-Z]/.test(password)) {
+    errors.push("Password must contain at least one letter")
+  }
+
+  if (!/[0-9]/.test(password)) {
+    errors.push("Password must contain at least one number")
+  }
+
+  if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password)) {
+    errors.push("Password must contain at least one special character")
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+  }
 }
 
 export function generateOTP(): string {

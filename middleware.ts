@@ -6,21 +6,30 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Public routes that don't require authentication
-  if (pathname === "/login" || pathname.startsWith("/api/auth/")) {
+  if (
+    pathname === "/landing" ||
+    pathname === "/login" ||
+    pathname === "/signup" ||
+    pathname.startsWith("/api/auth/") ||
+    pathname.startsWith("/_next/") ||
+    pathname.startsWith("/favicon")
+  ) {
     return NextResponse.next()
   }
 
-  // Check for auth token
-  const token = request.cookies.get("auth-token")?.value
+  // Protected routes that require authentication
+  if (pathname === "/dashboard" || pathname.startsWith("/api/files")) {
+    const token = request.cookies.get("auth-token")?.value
 
-  if (!token) {
-    return NextResponse.redirect(new URL("/login", request.url))
-  }
+    if (!token) {
+      return NextResponse.redirect(new URL("/login", request.url))
+    }
 
-  // Verify token
-  const payload = await verifyToken(token)
-  if (!payload) {
-    return NextResponse.redirect(new URL("/login", request.url))
+    // Verify token
+    const payload = await verifyToken(token)
+    if (!payload) {
+      return NextResponse.redirect(new URL("/login", request.url))
+    }
   }
 
   return NextResponse.next()

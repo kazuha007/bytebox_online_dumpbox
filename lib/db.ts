@@ -7,6 +7,11 @@ export interface User {
   email: string
   created_at: string
   last_login?: string
+  password_hash?: string
+  password_set: boolean
+  failed_login_attempts: number
+  lockout_until?: string
+  last_password_change?: string
 }
 
 export interface FileRecord {
@@ -26,8 +31,8 @@ export const db = {
   // User operations
   async createUser(email: string): Promise<User> {
     const result = await sql`
-      INSERT INTO users (email) 
-      VALUES (${email}) 
+      INSERT INTO users (email, password_set, failed_login_attempts) 
+      VALUES (${email}, false, 0) 
       ON CONFLICT (email) DO UPDATE SET last_login = CURRENT_TIMESTAMP
       RETURNING *
     `
@@ -41,13 +46,82 @@ export const db = {
     return (result[0] as User) || null
   },
 
+  async setUserPassword(userId: number, passwordHash: string): Promise<void> {
+    await sql`
+      UPDATE users 
+      SET password_hash = ${passwordHash}, 
+          password_set = true, 
+          last_password_change = CURRENT_TIMESTAMP,
+          failed_login_attempts = 0,
+          lockout_until = NULL
+      WHERE id = ${userId}
+    `
+  },
+
+  async updatePassword(userId: number, passwordHash: string): Promise<void> {
+    await sql`
+      UPDATE users 
+      SET password_hash = ${passwordHash}, 
+          last_password_change = CURRENT_TIMESTAMP,
+          failed_login_attempts = 0
+      WHERE id = ${userId}
+    `
+  },
+
+  async incrementFailedAttempts(userId: number): Promise<void> {
+    await sql`
+      UPDATE users 
+      SET failed_login_attempts = failed_login_attempts + 1
+      WHERE id = ${userId}
+    `
+  },
+
+  async lockAccount(userId: number): Promise<void> {
+    const lockoutTime = new Date(Date.now() + 60 * 60 * 1000) // 1 hour from now
+    await sql`
+      UPDATE users 
+      SET lockout_until = ${lockoutTime.toISOString()},
+          failed_login_attempts = 0
+      WHERE id = ${userId}
+    `
+  },
+
+  async resetFailedAttempts(userId: number): Promise<void> {
+    await sql`
+      UPDATE users 
+      SET failed_login_attempts = 0,
+          lockout_until = NULL
+      WHERE id = ${userId}
+    `
+  },
+
   async updateLastLogin(userId: number): Promise<void> {
     await sql`
       UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ${userId}
     `
   },
 
-  // File operations
+  async isAccountLocked(userId: number): Promise<boolean> {
+    const result = await sql`
+      SELECT lockout_until FROM users WHERE id = ${userId}
+    `
+    const user = result[0] as { lockout_until?: string }
+
+    if (!user?.lockout_until) return false
+
+    const lockoutTime = new Date(user.lockout_until)
+    const now = new Date()
+
+    if (now < lockoutTime) {
+      return true
+    } else {
+      // Lockout period has expired, clear it
+      await this.resetFailedAttempts(userId)
+      return false
+    }
+  },
+
+  // File operations (unchanged)
   async createFile(
     userId: number,
     filename: string,
