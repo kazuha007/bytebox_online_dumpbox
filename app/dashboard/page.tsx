@@ -351,7 +351,7 @@ export default function Dashboard() {
                   Storage
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {usedStorage.toFixed(2)} GB of {totalStorage} GB
+                  infinity GB
                 </span>
               </div>
               <Progress value={storagePercentage} className="h-2" />
